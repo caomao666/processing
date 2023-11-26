@@ -1,0 +1,29 @@
+//大小
+size(500, 500);
+//颜色
+color[] colors = {#FFFFFF, #000000, #FF0000, #FFFF00, #0000FF};
+//线条粗细
+strokeWeight(10);
+//网格数量
+int grid = 10;
+//随机种子
+randomSeed(2023);
+//遍历每个网格
+for (int i = 0; i < grid; i++) {
+  for (int j = 0; j < grid; j++) {
+    // 计算网格的坐标和大小
+    int x = i * width / grid;
+    int y = j * height / grid;
+    int w = width / grid;
+    int h = height / grid;
+    // 随机颜色
+    int c = colors[int(random(colors.length))];
+    if (c == #000000) {
+      line(x, y, x + w, y + h);
+    }
+    else {
+      fill(c);
+      rect(x, y, w, h);
+    }
+  }
+}
