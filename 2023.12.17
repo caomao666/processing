@@ -1,0 +1,400 @@
+ArrayList<Triangle> triangles;
+
+PVector[][] vp;
+
+int heightSection = 37;//圆柱体高度细分数，改为37
+int laySection = 36;//圆柱体每层扇面细分数
+float radiu = 200;//圆柱体半径
+float layerHeight = 20;//每层高度
+
+float rotateRange = PI;//圆柱体轴向扭曲弧度值
+
+boolean showNormalLine;//是否显示法线
+
+float ProbOfShowShape = 1;//每个三角形单元的显示概率
+float ProbOfShowContourShape = 1;//每个三角形单元绘制内轮廓的概率
+
+void setup() {
+  size(1200, 1200, P3D);
+  surface.setLocation(50, 50);
+  
+  UI();
+
+  setSystem();
+}
+
+/**
+ * [setSystem description]
+ * @Author   bit2atom
+ * @DateTime 2022-10-20T21:20:42+0800
+ */
+void setSystem() {
+  initiateModelData();//初始化构成圆柱体的空间向量数组
+  buildMesh(vp);//基于空间向量数组创建三角形对象
+
+  for (Triangle t : triangles) {
+    if (random(1)<ProbOfShowShape) {//如果该随机值满足该概率条件
+      t.drawShape = true;
+      if (random(1)<ProbOfShowContourShape){//如果该随机值满足该概率条件
+        t.drawContour = true;
+      }  
+    }
+  }
+}
+
+void draw() {
+  background(102);
+
+  lights();
+
+  for (Triangle t : triangles) {//遍历所有的三角形
+    t.run();
+  }
+
+  /**
+   * 此处cam.beginHUD()及cam.endHUD()用于实现slider对象不受camera行为的影响，始终显示在视口指定的位置
+   */
+  cam.beginHUD();
+  slider.draw();
+  cam.endHUD();
+
+  /**
+   * [if description]
+   * @Author   bit2atom
+   * @DateTime 2022-10-20T21:21:19+0800
+   * @param    {[type]}                 (mouseX<360 &&            mouseY< 260) || (mouseX<150 && mouseY > height-150) [description]
+   * @return   {[type]}                             [此处的代码用于实现当操作交互滑块的时候，不引起视窗行为的变化]
+   */
+  if ((mouseX<360 && mouseY< 260) || (mouseX<150 && mouseY > height-150)) {//此限定区域为滑块所在位置
+    cam.setActive(false);
+  } else {
+    cam.setActive(true);
+  }
+}
+
+/**
+ * [initiateData description]
+ * @Author   bit2atom
+ * @DateTime 2022-07-29T10:10:10+0800
+ * @return   {[void]}                 [初始化构成圆柱体的空间向量数组]
+ */
+void initiateModelData() {
+  vp= new PVector[heightSection][laySection];//生成一个heightSection X laySection的网格，并未网格上的每个点（向量）赋值
+  for (int i = 0; i < vp.length; i ++) {
+    float angSection = TWO_PI / vp[0].length;//每一层圆面切分为扇面后每个扇面的角的值
+    float sectionPhaseAngle = rotateRange / vp.length;//圆柱体整体扭曲角分配到每层的相位值
+    for (int j = 0; j < vp[0].length; j ++) {
+      float xx = radiu * cos(angSection * j + sectionPhaseAngle * i);
+      float yy = radiu * sin(angSection * j + sectionPhaseAngle * i);
+      float zz = layerHeight * i;//每一层的z值随层数线上叠加
+      vp[i][j] = new PVector(xx, yy, zz);
+    }
+  }
+}
+
+/**
+ * [buildModel description]
+ * @Author   bit2atom
+ * @DateTime 2022-07-29T10:10:04+0800
+ * @param    {[type]}                 PVector[][] model         [空间向量数组]
+ * @return   {[void]}                             [基于空间向量数组创建三角形对象]
+ * p1                  p2
+ * #####################
+ * #                   #
+ * #               #   #
+ * #     t1     #      #
+ * #         #         #     t1: p1 -> p3 -> p2
+ * #      #            #     t2: p2 -> p3 -> p4
+ * #  #        t2      #
+ * #                   #
+ * #####################
+ * p3                  p4
+ */
+void buildMesh(PVector[][] model) {
+  triangles = new ArrayList<Triangle>();
+
+  for (int i = 0; i < model.length; i ++) {//改为model.length
+    for (int j = 0; j < model[0].length; j ++) {
+      PVector p1 = new PVector(model[i][j].x, model[i][j].y, model[i][j].z);
+      PVector p2 = new PVector(model[(i+1)%model.length][j].x, model[(i+1)%model.length][j].y, model[(i+1)%model.length][j].z);//改为(i+1)%model.length
+      PVector p3 = new PVector(model[i][(j+1)%model[0].length].x, model[i][(j+1)%model[0].length].y, model[i][(j+1)%model[0].length].z);
+      PVector p4 = new PVector(model[(i+1)%model.length][(j+1)%model[0].length].x, model[(i+1)%model.length][(j+1)%model[0].length].y, model[(i+1)%model.length][(j+1)%model[0].length].z);//改为(i+1)%model.length
+      triangles.add(new Triangle(p1, p3, p2));//右手定则确定三角形三个点的顺序，该顺序影响三角形发现的方向
+      triangles.add(new Triangle(p2, p3, p4));//每四个点组成的网格可分为两个共边的三角形
+    }
+  }
+}
+class Triangle {
+  PVector[] triVertex;//三角形三个点向量
+  PVector[] contourVertex;//三角形三个内轮廓向量
+  float contourRatio = 0.2;//内轮廓宽度比例：值越小内轮廓宽度越大，中间孔洞越小
+  PVector center;//三角形中心点向量
+  PVector normal;//三角形法线向量
+  boolean drawShape;//是否绘制三角形
+  boolean drawContour;//是否绘制三角形内轮廓
+  
+  //构造函数
+  Triangle(PVector p1, PVector p2, PVector p3) {//传递三角形的三个向量数据
+    triVertex = new PVector[3];
+    contourVertex = new PVector[triVertex.length];
+    triVertex[0] = p1;
+    triVertex[1] = p2;
+    triVertex[2] = p3;
+    center = ct();//获得三角形中心点向量值
+    normal = calcuNormal();//获得三角形法线向量值
+    contourVertex = contour();//获得三角形三个内轮廓向量值
+  }
+
+  void run() {
+    if (drawShape) {
+      if (drawContour) {
+        drawTriangleContour();//绘制三角形内轮廓
+      } else {
+        drawTriangle();//绘制三角形
+      }
+      if (showNormalLine) {
+        displayNormal();//绘制法线
+      }
+    }
+  }
+
+  /**
+   * [calcuNormal description]
+   * @Author   bit2atom
+   * @DateTime 2022-10-20T21:22:23+0800
+   * @return   {[PVector]}                 [计算三角形法线向量]
+   */
+  PVector calcuNormal() {
+    PVector p1p2 = PVector.sub(triVertex[1], triVertex[0]);
+    PVector p1p3 = PVector.sub(triVertex[2], triVertex[0]);
+    PVector norm = p1p2.cross(p1p3);
+    return norm;
+  }
+
+  /**
+   * [contour description]
+   * @Author   bit2atom
+   * @DateTime 2022-10-20T21:22:29+0800
+   * @return   {[PVector[]]}                 [计算三角形三个内轮廓向量值]
+   *         #
+   *       # # #
+   *      #  #   #
+   *     #   #     #
+   *    #   #  #    #
+   *   #   #     #    #
+   *  #   # # # # #     #
+   * # #             #    #
+   * # # # # # # # # # # # #
+   */
+  PVector[] contour() {
+    PVector[] ctmp = new PVector[contourVertex.length];
+    for (int i = 0; i < triVertex.length; i ++) {
+      PVector tmp = PVector.sub(triVertex[i], center);
+      float len = tmp.mag();
+      len *= contourRatio;
+      tmp.normalize();
+      tmp.setMag(len);
+      tmp.add(center);
+      ctmp[i] = new PVector(tmp.x, tmp.y, tmp.z);
+    }
+    return ctmp;
+  }
+
+  /**
+   * [drawTriangleContour description]
+   * @Author   bit2atom
+   * @DateTime 2022-10-20T21:22:35+0800
+   * @return   {[void]}                 [绘制三角形内轮廓：三个四边形]
+   */
+  void drawTriangleContour() {
+    stroke(0);
+    strokeWeight(1);
+    fill(255);
+
+    for (int i = 0; i < 3; i ++) {
+      beginShape(QUAD);
+      vertex(triVertex[i].x, triVertex[i].y, triVertex[i].z);
+      vertex(contourVertex[i].x, contourVertex[i].y, contourVertex[i].z);
+      vertex(contourVertex[(i+1)%3].x, contourVertex[(i+1)%3].y, contourVertex[(i+1)%3].z);
+      vertex(triVertex[(i+1)%3].x, triVertex[(i+1)%3].y, triVertex[(i+1)%3].z);
+      endShape();
+    }
+  }
+
+  /**
+   * [drawTriangle description]
+   * @Author   bit2atom
+   * @DateTime 2022-10-20T21:22:48+0800
+   * @return   {[void]}                 [绘制三角形]
+   */
+  void drawTriangle() {
+    beginShape(TRIANGLE);
+    stroke(0);
+    strokeWeight(1);
+    fill(255);
+    for (int i = 0; i < triVertex.length; i ++) {
+      vertex(triVertex[i].x, triVertex[i].y, triVertex[i].z);
+    }
+    endShape();
+  }
+
+  /**
+   * [ct description]
+   * @Author   bit2atom
+   * @DateTime 2022-10-20T21:22:54+0800
+   * @return   {[PVector]}                 [计算三角形中心点向量]
+   */
+  PVector ct() {
+    float cx = 0;
+    float cy = 0;
+    float cz = 0;
+
+    for (int i = 0; i < triVertex.length; i ++) {
+      cx += triVertex[i].x;
+      cy += triVertex[i].y;
+      cz += triVertex[i].z;
+    }
+
+    cx /= 3.0;
+    cy /= 3.0;
+    cz /= 3.0;
+    PVector cv = new PVector(cx, cy, cz);
+
+    return cv;
+  }
+
+  /**
+   * [displayNormal description]
+   * @Author   bit2atom
+   * @DateTime 2022-10-20T21:23:02+0800
+   * @return   {[void]}                 [绘制三角形法线]
+   */
+  void displayNormal() {
+    PVector nm = new PVector(normal.x, normal.y, normal.z);
+    nm.normalize();//法线向量归一化
+    nm.setMag(20);//设置法线长度为10
+    nm.add(center);
+    stroke(0);
+    strokeWeight(3);
+    point(center.x, center.y, center.z);//三角形中心点
+    stroke(200, 0, 200);
+    strokeWeight(1);
+    line(center.x, center.y, center.z, nm.x, nm.y, nm.z);//从三角形中心点向发现顶点绘制一条直线
+  }
+}
+import controlP5.*;
+import peasy.*;
+
+ControlP5 slider;
+PeasyCam cam;
+
+void UI() {
+  int sliderWidth = 300;//控制条宽度
+  int sliderHeight = 30;//控制条高度
+
+  cam = new PeasyCam(this, 800);
+
+  slider = new ControlP5(this, createFont("微软雅黑", 14));
+
+  slider.addSlider("heightSection")//圆柱体高度细分数
+    .setPosition(20, 20)
+    .setSize(sliderWidth, sliderHeight)
+    .setRange(1, 72)
+    .setValue(36)
+    ;
+
+  slider.addSlider("laySection")//圆柱体每层扇面细分数
+    .setPosition(20, 60)
+    .setSize(sliderWidth, sliderHeight)
+    .setRange(3, 128)
+    .setValue(72)
+    ;
+
+  slider.addSlider("layerHeight")//每层高度
+    .setPosition(20, 100)
+    .setSize(sliderWidth, sliderHeight)
+    .setRange(0, 200)
+    .setValue(20)
+    ;
+
+  slider.addSlider("rotateRange")//圆柱体轴向扭曲弧度值
+    .setPosition(20, 140)
+    .setSize(sliderWidth, sliderHeight)
+    .setRange(0, PI*8)
+    .setValue(PI)
+    ;
+
+  slider.addSlider("ProbOfShowShape")//每个三角形单元的显示概率
+    .setPosition(20, 180)
+    .setSize(sliderWidth, sliderHeight)
+    .setRange(0, 1)
+    .setValue(0.75)
+    ;
+
+  slider.addSlider("ProbOfShowContourShape")//每个三角形单元绘制内轮廓的概率
+    .setPosition(20, 220)
+    .setSize(sliderWidth, sliderHeight)
+    .setRange(0, 1)
+    .setValue(0.5)
+    ;
+
+  slider.addToggle("showNormal")//显示三角形单元法线
+    .setPosition(20, height-100)
+    .setSize(sliderWidth/3, sliderHeight)
+    .setValue(true)
+    .setMode(ControlP5.SWITCH)
+    ;
+
+  //添加两个slider控件，分别命名为"colorMode"和"brightness"
+  slider.addSlider("colorMode")//颜色模式
+    .setPosition(20, 260)
+    .setSize(sliderWidth, sliderHeight)
+    .setRange(0, 3)//0:RGB, 1:HSB, 2:CMYK, 3:GRAY
+    .setValue(0)
+    ;
+
+  slider.addSlider("brightness")//亮度
+    .setPosition(20, 300)
+    .setSize(sliderWidth, sliderHeight)
+    .setRange(0, 255)
+    .setValue(255)
+    ;
+
+  slider.setAutoDraw(false);
+}
+
+/**
+ * [showNormal description]
+ * @Author   bit2atom
+ * @DateTime 2022-10-20T21:18:36+0800
+ * @param    {[type]}                 boolean theFlag       [toggle status: on / off]
+ * @return   {[type]}                         [该toggle用于控制法线的显示]
+ */
+void showNormal(boolean theFlag) {
+  if (theFlag==true) {
+    showNormalLine = true;
+  } else {
+    showNormalLine = false;
+  }
+}
+
+/**
+ * [controlEvent description]
+ * @Author   bit2atom
+ * @DateTime 2022-07-29T10:09:57+0800
+ * @param    {[type]}                 ControlEvent theEvent      [当对应的控件实践发生时运行相关函数（此处为setSystem()）]
+ * @return   {[type]}                              [description]
+ */
+void controlEvent(ControlEvent theEvent) {
+  if (theEvent.isFrom(slider.getController("heightSection")) ||
+    theEvent.isFrom(slider.getController("laySection")) ||
+    theEvent.isFrom(slider.getController("layerHeight")) ||
+    theEvent.isFrom(slider.getController("rotateRange")) ||
+    theEvent.isFrom(slider.getController("ProbOfShowShape")) ||
+    theEvent.isFrom(slider.getController("ProbOfShowContourShape")) ||
+    //添加两个条件判断，分别检测"colorMode"和"brightness"的控件事件
+    theEvent.isFrom(slider.getController("colorMode")) ||
+    theEvent.isFrom(slider.getController("brightness"))) {
+    setSystem();
+  }
+}
