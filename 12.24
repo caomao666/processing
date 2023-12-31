@@ -1,0 +1,58 @@
+int numParticles = 1000;  // Decrease the number of particles
+Particle[] particles;
+PVector seed;
+
+void setup() {
+  size(800, 800);
+  background(0);
+  seed = new PVector(width/2, height/2);
+  particles = new Particle[numParticles];
+  for (int i = 0; i < numParticles; i++) {
+    particles[i] = new Particle(random(width), random(height));
+  }
+}
+
+void draw() {
+  // Remove the background command to keep the trails persistent
+  stroke(255, 100);  // Increase the alpha value to make the particles more visible
+  point(seed.x, seed.y);
+  for (int i = 0; i < numParticles; i++) {
+    particles[i].update();
+    particles[i].display();
+    if (particles[i].isStuck(seed)) {
+      seed = new PVector(particles[i].pos.x, particles[i].pos.y);
+      particles[i] = new Particle(random(width), random(height));
+    }
+  }
+}
+
+class Particle {
+  PVector pos;
+  float angle;
+  float stepSize = 1.0;
+
+  Particle(float x, float y) {
+    pos = new PVector(x, y);
+    angle = random(TWO_PI);
+  }
+
+  void update() {
+    angle += random(-0.1, 0.1);
+    pos.x += cos(angle) * stepSize;
+    pos.y += sin(angle) * stepSize;
+    pos.x = constrain(pos.x, 0, width-1);
+    pos.y = constrain(pos.y, 0, height-1);
+  }
+
+  void display() {
+    stroke(255, 100);  // Increase the alpha value to make the particles more visible
+    point(pos.x, pos.y);
+  }
+
+  boolean isStuck(PVector other) {
+    float dx = pos.x - other.x;
+    float dy = pos.y - other.y;
+    float distance = sqrt(dx*dx + dy*dy);
+    return (distance < stepSize * 2);
+  }
+}
